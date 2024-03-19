@@ -9,6 +9,9 @@ locals {
     "arn:${local.partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:${local.partition}:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:${local.partition}:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+    "arn:${local.partition}:iam::aws:policy/CloudWatchAgentAdminPolicy",
+    "arn:${local.partition}:iam::aws:policy/CloudWatchAgentServerPolicy",
+    "arn:${local.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore",
     aws_iam_policy.worker_autoscaling.arn
   ], var.node_group_additional_policies)
 

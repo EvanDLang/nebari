@@ -158,6 +158,39 @@ def set_asg_tags(asg_node_group_map: Dict[str, str], region: str) -> None:
                 "PropagateAtLaunch": True,
             }
         )
+        
+        if node_group != 'general':
+            tags.append(
+                {
+                    "Key": "k8s.io/cluster-autoscaler/node-template/label/intent",
+                    "Value": "apps",
+                    "ResourceId": asg_name,
+                    "ResourceType": "auto-scaling-group",
+                    "PropagateAtLaunch": True,
+                }
+            )
+            tags.append(
+                {
+                    "Key": "k8s.io/cluster-autoscaler/node-template/label/lifecycle",
+                    "Value": "Ec2Spot",
+                    "ResourceId": asg_name,
+                    "ResourceType": "auto-scaling-group",
+                    "PropagateAtLaunch": True,
+                }
+            )
+            tags.append(
+                {
+                    "Key": "k8s.io/cluster-autoscaler/node-template/label/aws.amazon.com/spot",
+                    "Value": "true",
+                    "ResourceId": asg_name,
+                    "ResourceType": "auto-scaling-group",
+                    "PropagateAtLaunch": True,
+                }
+            )
+        
+        
+        
+        
     autoscaling_client.create_or_update_tags(Tags=tags)
 
 

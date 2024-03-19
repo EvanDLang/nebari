@@ -6,3 +6,7 @@ output "credentials" {
     arn                = aws_s3_bucket.main.arn
   }
 }
+
+output "aws_iam_s3_policy_arn" {
+  value  = aws_iam_policy.s3_access_policy.arn
+}

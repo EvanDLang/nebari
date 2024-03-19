@@ -121,11 +121,12 @@ class AzureInputVars(schema.Base):
 
 class AWSNodeGroupInputVars(schema.Base):
     name: str
-    instance_type: str
+    instance_type: List[str]
     gpu: bool = False
     min_size: int
     desired_size: int
     max_size: int
+    capacity_type: str
     single_subnet: bool
     permissions_boundary: Optional[str] = None
 
@@ -434,9 +435,10 @@ class AzureProvider(schema.Base):
 
 
 class AWSNodeGroup(schema.Base):
-    instance: str
+    instance: List[str]
     min_nodes: int = 0
     max_nodes: int
+    capacity_type: str = "ON_DEMAND"
     gpu: bool = False
     single_subnet: bool = False
     permissions_boundary: Optional[str] = None
@@ -447,13 +449,9 @@ class AmazonWebServicesProvider(schema.Base):
     kubernetes_version: str
     availability_zones: Optional[List[str]]
     node_groups: Dict[str, AWSNodeGroup] = {
-        "general": AWSNodeGroup(instance="m5.2xlarge", min_nodes=1, max_nodes=1),
-        "user": AWSNodeGroup(
-            instance="m5.xlarge", min_nodes=0, max_nodes=5, single_subnet=False
-        ),
-        "worker": AWSNodeGroup(
-            instance="m5.xlarge", min_nodes=0, max_nodes=5, single_subnet=False
-        ),
+        "general": AWSNodeGroup(instance=["m5.2xlarge"], min_nodes=1, max_nodes=1),
+        "user": AWSNodeGroup(instance=["m5.xlarge"], max_nodes=5, single_subnet=False),
+        "worker": AWSNodeGroup(instance=["m5.xlarge"], max_nodes=5, single_subnet=False)
     }
     existing_subnet_ids: List[str] = None
     existing_security_group_id: str = None
@@ -484,10 +482,11 @@ class AmazonWebServicesProvider(schema.Base):
         node_groups = values["node_groups"]
         available_instances = amazon_web_services.instances(region)
         for name, node_group in node_groups.items():
-            if node_group.instance not in available_instances:
-                raise ValueError(
-                    f"Instance {node_group.instance} not available out of available instances {available_instances.keys()}"
-                )
+            for instance in node_group.instance:
+                if instance not in available_instances:
+                    raise ValueError(
+                        f"Instance {instance} not available out of available instances {available_instances.keys()}"
+                    )
 
         if values["availability_zones"] is None:
             zones = amazon_web_services.zones(region)
@@ -777,6 +776,7 @@ class KubernetesInfrastructureStage(NebariTerraformStage):
                         min_size=node_group.min_nodes,
                         desired_size=node_group.min_nodes,
                         max_size=node_group.max_nodes,
+                        capacity_type=node_group.capacity_type,
                         single_subnet=node_group.single_subnet,
                         permissions_boundary=node_group.permissions_boundary,
                     )

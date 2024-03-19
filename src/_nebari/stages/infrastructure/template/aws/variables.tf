@@ -29,14 +29,15 @@ variable "kubernetes_version" {
 }
 
 variable "node_groups" {
-  description = "AWS node groups"
+  description = "Node groups to add to EKS Cluster"
   type = list(object({
     name          = string
-    instance_type = string
+    instance_type = list(string)
     gpu           = bool
     min_size      = number
     desired_size  = number
     max_size      = number
+    capacity_type = string
     single_subnet = bool
   }))
 }

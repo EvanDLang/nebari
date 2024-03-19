@@ -29,7 +29,8 @@ resource "aws_eks_node_group" "main" {
   node_role_arn   = aws_iam_role.node-group.arn
   subnet_ids      = var.node_groups[count.index].single_subnet ? [element(var.cluster_subnets, 0)] : var.cluster_subnets
 
-  instance_types = [var.node_groups[count.index].instance_type]
+  instance_types = var.node_groups[count.index].instance_type
+  capacity_type  = var.node_groups[count.index].capacity_type
   ami_type       = var.node_groups[count.index].gpu == true ? "AL2_x86_64_GPU" : "AL2_x86_64"
   disk_size      = 50
 
@@ -37,10 +38,6 @@ resource "aws_eks_node_group" "main" {
     min_size     = var.node_groups[count.index].min_size
     desired_size = var.node_groups[count.index].desired_size
     max_size     = var.node_groups[count.index].max_size
-  }
-
-  labels = {
-    "dedicated" = var.node_groups[count.index].name
   }
 
   lifecycle {
@@ -56,11 +53,26 @@ resource "aws_eks_node_group" "main" {
     aws_iam_role_policy_attachment.node-group-policy,
   ]
 
-  tags = merge({
-    #    "kubernetes.io/cluster/${var.name}"                       = "shared"
-    "k8s.io/cluster-autoscaler/node-template/label/dedicated" = var.node_groups[count.index].name
-    propagate_at_launch                                       = true
-  }, var.tags)
+  tags = merge(
+    {
+      "k8s.io/cluster-autoscaler/node-template/label/dedicated" = var.node_groups[count.index].name
+    },
+    var.node_groups[count.index].capacity_type == "SPOT" ? {
+      "k8s.io/cluster-autoscaler/node-template/label/intent"     = "apps"
+      "k8s.io/cluster-autoscaler/node-template/label/lifecycle"  = "Ec2Spot"
+      "k8s.io/cluster-autoscaler/node-template/label/aws.amazon.com/spot" = "true"
+    } : {}, var.tags)
+
+  labels = merge(
+    {
+      "dedicated" = var.node_groups[count.index].name
+    },
+    var.node_groups[count.index].capacity_type == "SPOT" ? {
+      "lifecycle"           = "Ec2Spot"
+      "intent"              = "apps"
+      "aws.amazon.com/spot" = "true"
+    } : {}, var.labels)
+
 }
 
 data "aws_eks_cluster_auth" "main" {

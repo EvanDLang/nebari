@@ -9,6 +9,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "labels" {
+  description = "Additional tags for EKS cluster"
+  type        = map(string)
+  default     = {}
+}
+
 variable "cluster_subnets" {
   description = "AWS VPC subnets to use for EKS cluster"
   type        = list(string)
@@ -45,19 +51,20 @@ variable "node_groups" {
   description = "Node groups to add to EKS Cluster"
   type = list(object({
     name          = string
-    instance_type = string
+    instance_type = list(string)
     gpu           = bool
     min_size      = number
     desired_size  = number
     max_size      = number
+    capacity_type = string
     single_subnet = bool
   }))
 }
 
 variable "node_group_instance_type" {
   description = "AWS instance types to use for kubernetes nodes"
-  type        = string
-  default     = "m5.large"
+  type        = list(string)
+  default     = ["m5.large"]
 }
 
 variable "endpoint_private_access" {

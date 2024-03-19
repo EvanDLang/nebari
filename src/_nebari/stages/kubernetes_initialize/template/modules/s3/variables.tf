@@ -1,4 +1,4 @@
-variable "name" {
+variable "cluster_name" {
   description = "Prefix name for bucket resource"
   type        = string
 }
