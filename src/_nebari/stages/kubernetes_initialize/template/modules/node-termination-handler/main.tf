@@ -10,7 +10,8 @@ data "aws_eks_node_group" "user" {
 }
 
 resource "aws_sqs_queue" "spot_queue" {
-  name = var.sqs_name
+  #name = var.sqs_name
+  name = "${var.sqs_name}-${var.namespace}"
   sqs_managed_sse_enabled = true
   message_retention_seconds = 300
   
@@ -25,7 +26,7 @@ resource "aws_sqs_queue" "spot_queue" {
             },
             "Action": "sqs:SendMessage",
             "Resource": [
-                "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.sqs_name}"
+                "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.sqs_name}-${var.namespace}"
             ]
         }]
     }
@@ -33,7 +34,7 @@ resource "aws_sqs_queue" "spot_queue" {
 }
 
 resource "aws_iam_policy" "node_termination_handler_sa_policy" {
-  name        = "node-termination-handler-sa-policy"
+  name        = "node-termination-handler-sa-policy-${var.namespace}"
 
   policy = jsonencode(
         {
@@ -63,7 +64,7 @@ resource "aws_iam_role_policy_attachment" "node_termination_handler_sa_policy_at
 
 
 resource "aws_iam_role" "asg_sqs_role" {
-  name = "asg_sqs_role"
+  name = "asg_sqs_role-${var.namespace}"
 
   assume_role_policy = jsonencode(
     {
@@ -89,7 +90,7 @@ resource "aws_iam_role" "asg_sqs_role" {
 
 
 resource "aws_autoscaling_lifecycle_hook" "spot_queue_life_cycle_hook_termination_user" {
-  name                    = "spot_queue_life_cycle_hook_termination_user"
+  name                    = "spot_queue_life_cycle_hook_termination_user--${var.namespace}"
   autoscaling_group_name  = data.aws_eks_node_group.user.resources[0].autoscaling_groups[0].name
   default_result          = "CONTINUE"
   heartbeat_timeout       = 300
@@ -120,7 +121,7 @@ data "aws_eks_node_group" "worker" {
 }
 
 resource "aws_autoscaling_lifecycle_hook" "spot_queue_life_cycle_hook_termination_worker" {   
-  name                    = "spot_queue_life_cycle_hook_termination_worker"
+  name                    = "spot_queue_life_cycle_hook_termination_worker-${var.namespace}"
   autoscaling_group_name  = data.aws_eks_node_group.worker.resources[0].autoscaling_groups[0].name
   default_result          = "CONTINUE"
   heartbeat_timeout       = 300

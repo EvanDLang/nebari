@@ -18,7 +18,7 @@ resource "aws_s3_bucket" "main" {
 
 # Attach policies to the IAM role allowing access to the S3 bucket
 resource "aws_iam_policy" "s3_access_policy" {
-  name        = "s3_access_policy"
+  name        = "${var.cluster_name}-s3_access_policy"
   description = "IAM policy for S3 bucket access"
 
   policy = jsonencode({
