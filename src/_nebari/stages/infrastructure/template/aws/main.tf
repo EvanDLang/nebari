@@ -10,6 +10,8 @@ data "aws_partition" "current" {}
 locals {
   # Only override_network if both existing_subnet_ids and existing_security_group_id are not null.
   override_network  = (var.existing_subnet_ids != null) && (var.existing_security_group_id != null)
+  override_efs      = var.existing_efs != null
+  efs_endpoint      = local.override_efs ? var.existing_efs : module.efs.credentials.dns_name
   subnet_ids        = local.override_network ? var.existing_subnet_ids : module.network[0].subnet_ids
   security_group_id = local.override_network ? var.existing_security_group_id : module.network[0].security_group_id
   partition         = data.aws_partition.current.partition
@@ -64,6 +66,7 @@ module "registry-jupyterlab" {
 
 # ====================== EFS =========================
 module "efs" {
+  count = local.override_efs ? 0 : 1
   source = "./modules/efs"
 
   name = "${local.cluster_name}-jupyterhub-shared"

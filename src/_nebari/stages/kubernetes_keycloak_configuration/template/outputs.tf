@@ -8,7 +8,7 @@ output "keycloak-read-only-user-credentials" {
   sensitive   = true
   value = {
     username  = keycloak_user.read-only-user.username
-    password  = random_password.keycloak-view-only-user-password.result
+    password  = var.keycloak_view_only_user_password
     client_id = "admin-cli"
     realm     = data.keycloak_realm.master.realm
   }

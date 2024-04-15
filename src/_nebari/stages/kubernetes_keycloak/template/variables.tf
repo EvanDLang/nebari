@@ -31,3 +31,13 @@ variable "node_group" {
     value = string
   })
 }
+
+variable "keycloak_nebari_bot_password" {
+  description = "keycloak-nebari-bot-password"
+  type        = string
+}
+
+variable "existing_realm" {
+  description = "flag that represents if the nebari keycloak realm already exists"
+  type = string
+}

@@ -1,8 +1,3 @@
-resource "random_password" "keycloak-nebari-bot-password" {
-  length  = 32
-  special = false
-}
-
 module "kubernetes-keycloak-helm" {
   source = "./modules/kubernetes/keycloak-helm"
 
@@ -10,7 +5,7 @@ module "kubernetes-keycloak-helm" {
 
   external-url = var.endpoint
 
-  nebari-bot-password = random_password.keycloak-nebari-bot-password.result
+  nebari-bot-password = var.keycloak_nebari_bot_password
 
   initial_root_password = var.initial_root_password
 

@@ -17,7 +17,10 @@ def destroy_configuration(config: schema.Main, stages: List[hookspecs.NebariStag
 
     stage_outputs = {}
     status = {}
-
+    
+    # removed keycloak configuration destruction from the destroy sequence to preserver users/realm
+    stages = [stage for stage in stages if stage.name != "06-kubernetes-keycloak-configuration"]
+    
     with timer(logger, "destroying Nebari"):
         with contextlib.ExitStack() as stack:
             for stage in stages:

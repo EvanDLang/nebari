@@ -24,3 +24,8 @@ variable "default_groups" {
   type        = set(string)
   default     = []
 }
+
+variable "keycloak_view_only_user_password" {
+  description = "Password for the keycloak view only user"
+  type        =  string
+}

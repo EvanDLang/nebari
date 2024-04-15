@@ -78,3 +78,8 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "existing_efs" {
+  description = "url for existing efs storage"
+  type        = string
+}

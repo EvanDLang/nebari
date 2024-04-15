@@ -93,16 +93,12 @@ data "keycloak_realm" "master" {
   realm = "master"
 }
 
-resource "random_password" "keycloak-view-only-user-password" {
-  length  = 32
-  special = false
-}
 
 resource "keycloak_user" "read-only-user" {
   realm_id = data.keycloak_realm.master.id
   username = "read-only-user"
   initial_password {
-    value     = random_password.keycloak-view-only-user-password.result
+    value     = var.keycloak_view_only_user_password
     temporary = false
   }
 }

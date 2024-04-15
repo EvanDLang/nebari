@@ -33,6 +33,10 @@ class InputVars(schema.Base):
     initial_root_password: str
     overrides: List[str]
     node_group: Dict[str, str]
+    existing_realm: bool = False
+    keycloak_nebari_bot_password: str
+    keycloak_view_only_user_password: str
+    
 
 
 @contextlib.contextmanager
@@ -172,9 +176,12 @@ class GitHubAuthentication(Authentication):
 
 
 class Keycloak(schema.Base):
+    existing_realm: bool = False
     initial_root_password: str = pydantic.Field(default_factory=random_secure_string)
     overrides: typing.Dict = {}
     realm_display_name: str = "Nebari"
+    keycloak_nebari_bot_password: str = pydantic.Field(default_factory=random_secure_string)
+    keycloak_view_only_user_password: str = pydantic.Field(default_factory=random_secure_string)
 
 
 class Security(schema.Base):
@@ -222,6 +229,9 @@ class KubernetesKeycloakStage(NebariTerraformStage):
             environment=self.config.namespace,
             endpoint=stage_outputs["stages/04-kubernetes-ingress"]["domain"],
             initial_root_password=self.config.security.keycloak.initial_root_password,
+            keycloak_nebari_bot_password=self.config.security.keycloak.keycloak_nebari_bot_password,
+            keycloak_view_only_user_password=self.config.security.keycloak.keycloak_view_only_user_password,
+            existing_realm=self.config.security.keycloak.existing_realm,
             overrides=[json.dumps(self.config.security.keycloak.overrides)],
             node_group=stage_outputs["stages/02-infrastructure"]["node_selectors"][
                 "general"
@@ -233,7 +243,7 @@ class KubernetesKeycloakStage(NebariTerraformStage):
     ):
         from keycloak import KeycloakAdmin
         from keycloak.exceptions import KeycloakError
-
+        
         keycloak_url = f"{stage_outputs['stages/' + self.name]['keycloak_credentials']['value']['url']}/auth/"
 
         def _attempt_keycloak_connection(

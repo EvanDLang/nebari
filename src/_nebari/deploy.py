@@ -49,6 +49,27 @@ def deploy_configuration(
         stage_outputs = {}
         with contextlib.ExitStack() as stack:
             for stage in stages:
+                if stage.name == "06-kubernetes-keycloak-configuration":
+                    print(config.security.keycloak.keycloak_view_only_user_password)
+                    print(config.security.keycloak.existing_realm)
+                    if config.security.keycloak.existing_realm == True:
+                        stage_outputs["stages/06-kubernetes-keycloak-configuration"] = {
+                            "realm_id": {
+                                "description": "",
+                                "value": "nebari"
+                            },
+                            "keycloak-read-only-user-credentials": {
+                                "description": "",
+                                "sensitive": True,
+                                "value": {
+                                    "username": "read-only-user",
+                                    "password": config.security.keycloak.keycloak_view_only_user_password,
+                                    "client_id": "admin_cli",
+                                    "realm": "master"
+                                }
+                            }
+                        }
+                        continue
                 s = stage(output_directory=pathlib.Path.cwd(), config=config)
                 stack.enter_context(s.deploy(stage_outputs, disable_prompt))
 

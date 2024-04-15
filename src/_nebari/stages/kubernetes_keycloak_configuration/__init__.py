@@ -17,6 +17,7 @@ class InputVars(schema.Base):
     authentication: Dict[str, Any]
     keycloak_groups: List[str] = ["superadmin", "admin", "developer", "analyst"]
     default_groups: List[str] = ["analyst"]
+    keycloak_view_only_user_password: str
 
 
 class KubernetesKeycloakConfigurationStage(NebariTerraformStage):
@@ -32,6 +33,7 @@ class KubernetesKeycloakConfigurationStage(NebariTerraformStage):
         input_vars = InputVars(
             realm_display_name=self.config.security.keycloak.realm_display_name,
             authentication=self.config.security.authentication,
+            keycloak_view_only_user_password=self.config.security.keycloak.keycloak_view_only_user_password
         )
 
         users_group = ["users"] if self.config.security.shared_users_group else []

@@ -22,7 +22,8 @@ output "kubeconfig_filename" {
 
 output "nfs_endpoint" {
   description = "Endpoint for nfs server"
-  value       = module.efs.credentials.dns_name
+  
+  value = local.efs_endpoint
 }
 
 output "cluster_oidc_issuer_url" {
