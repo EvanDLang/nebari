@@ -327,8 +327,8 @@ def configure_user(username, groups, uid=1000, gid=100):
         "SHELL": "/bin/bash",
         # set home directory to username
         "HOME": f"/home/{username}",
-        # Disable global usage of pip
-        "PIP_REQUIRE_VIRTUALENV": "true",
+        # I changed this to allow global usage of pip
+        "PIP_REQUIRE_VIRTUALENV": "false",
     }
 
     etc_passwd, etc_group = generate_nss_files(

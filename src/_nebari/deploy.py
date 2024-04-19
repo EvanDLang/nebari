@@ -50,8 +50,6 @@ def deploy_configuration(
         with contextlib.ExitStack() as stack:
             for stage in stages:
                 if stage.name == "06-kubernetes-keycloak-configuration":
-                    print(config.security.keycloak.keycloak_view_only_user_password)
-                    print(config.security.keycloak.existing_realm)
                     if config.security.keycloak.existing_realm == True:
                         stage_outputs["stages/06-kubernetes-keycloak-configuration"] = {
                             "realm_id": {

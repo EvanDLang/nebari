@@ -42,6 +42,5 @@ module "node-termination-handler" {
 module "s3" {
   source = "./modules/s3"
   cluster_name = local.cluster_name
-  #region = var.region
 }
 
