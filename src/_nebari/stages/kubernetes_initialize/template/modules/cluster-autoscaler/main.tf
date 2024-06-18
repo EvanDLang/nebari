@@ -19,6 +19,9 @@ resource "helm_release" "autoscaler" {
         clusterName = var.cluster-name
         enabled     = true
       }
+      nodeSelector = {
+        "${var.node_group.key}" = tostring(var.node_group.value)
+      }
     })
   ], var.overrides)
 }

@@ -49,7 +49,7 @@ class InputVars(schema.Base):
     external_container_reg: Union[ExtContainerReg, None] = None
     gpu_enabled: bool = False
     gpu_node_group_names: List[str] = []
-
+    node_groups: dict
 
 class InputSchema(schema.Base):
     external_container_reg: ExtContainerReg = ExtContainerReg()
@@ -79,6 +79,7 @@ class KubernetesInitializeStage(NebariTerraformStage):
             environment=self.config.namespace,
             cloud_provider=self.config.provider.value,
             external_container_reg=self.config.external_container_reg.dict(),
+            node_groups=stage_outputs["stages/02-infrastructure"]["node_selectors"]
         )
 
         if self.config.provider == schema.ProviderEnum.gcp:

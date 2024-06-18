@@ -18,3 +18,11 @@ variable "overrides" {
   type        = list(string)
   default     = []
 }
+
+variable "node_group" {
+  description = "Node key value pair for bound resources"
+  type = object({
+    key   = string
+    value = string
+  })
+}

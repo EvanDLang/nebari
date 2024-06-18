@@ -19,7 +19,16 @@ variable "namespace" {
   type        = string
 }
 
-#variable "name" {
-#  description = "Prefix name to assign to nebari resources"
-#  type        = string
-#}
+variable "node_group" {
+  description = "Node key value pair for bound resources"
+  type = object({
+    key   = string
+    value = string
+  })
+}
+
+variable "overrides" {
+  description = "Jupyterhub helm chart list of overrides"
+  type        = list(string)
+  default     = []
+}

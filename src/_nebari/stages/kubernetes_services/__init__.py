@@ -73,7 +73,7 @@ class JupyterHubTheme(schema.Base):
     navbar_color: str = "#1c1d26"
     navbar_text_color: str = "#f1f1f6"
     navbar_hover_color: str = "#db96f3"
-    danger_color: str = "#e60f66"
+    danger_color: str = "#e03830"
     display_version: str = "True"  # limitation of theme everything is a str
 
 

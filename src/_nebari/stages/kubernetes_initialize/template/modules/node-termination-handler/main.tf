@@ -153,21 +153,21 @@ resource "helm_release" "node_termination_handler_release" {
   name       = "aws-node-termination-handler"
   #version    = "0.12.0"
   repository = "https://aws.github.io/eks-charts"
+  
+   values = concat([
+    jsonencode({
+      enableSqsTerminationDraining = true
 
-  set {
-    name = "enableSqsTerminationDraining"
-    value = "true"
-  } 
+      queueURL =  aws_sqs_queue.spot_queue.url
 
-  set {
-    name = "queueURL"
-    value = aws_sqs_queue.spot_queue.url
-  }
+      awsRegion = var.aws_region
 
-  set {
-    name = "awsRegion"
-    value = var.aws_region
-  }
+      nodeSelector = {
+        "${var.node_group.key}" = var.node_group.value
+      }
+
+    })
+  ], var.overrides)
 
   depends_on = [
     aws_sqs_queue.spot_queue

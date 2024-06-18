@@ -30,3 +30,11 @@ variable "gpu_enabled" {
 variable "gpu_node_group_names" {
   description = "Names of node groups with GPU"
 }
+
+variable "node_groups" {
+  description = "Node group selectors for kubernetes resources"
+  type = map(object({
+    key   = string
+    value = string
+  }))
+}
