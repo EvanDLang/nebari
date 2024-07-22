@@ -54,14 +54,14 @@ module "network" {
   aws_availability_zones = length(var.availability_zones) >= 2 ? var.availability_zones : slice(sort(data.aws_availability_zones.awszones.names), 0, 2)
 }
 
-
+# commented out, this is not used
 # ==================== REGISTRIES =====================
-module "registry-jupyterlab" {
-  source = "./modules/registry"
-
-  name = "${local.cluster_name}-jupyterlab"
-  tags = local.additional_tags
-}
+#module "registry-jupyterlab" {
+#  source = "./modules/registry"
+#
+#  name = "${local.cluster_name}-jupyterlab"
+#  tags = local.additional_tags
+#}
 
 
 # ====================== EFS =========================

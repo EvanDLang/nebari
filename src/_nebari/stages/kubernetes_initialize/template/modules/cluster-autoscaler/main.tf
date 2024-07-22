@@ -19,8 +19,23 @@ resource "helm_release" "autoscaler" {
         clusterName = var.cluster-name
         enabled     = true
       }
-      nodeSelector = {
-        "${var.node_group.key}" = tostring(var.node_group.value)
+
+      affinity = {
+        nodeAffinity = {
+          requiredDuringSchedulingIgnoredDuringExecution = {
+            nodeSelectorTerms = [
+              {
+                matchExpressions = [
+                  {
+                    key      = "eks.amazonaws.com/nodegroup"
+                    operator = "In"
+                    values   = ["general"]
+                  }
+                ]
+              }
+            ]
+          }
+        }
       }
     })
   ], var.overrides)

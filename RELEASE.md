@@ -9,6 +9,62 @@ This file is copied to nebari-dev/nebari-docs using a GitHub Action. -->
 
 ---
 
+### Release 2024.5.1 - May 13, 2024
+
+## What's Changed
+
+* make userscheduler run on general node group by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2415>
+* Upgrade to Pydantic V2 by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2348>
+* Pydantic2 PR fix by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2421>
+* remove redundant pydantic class, fix bug by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2426>
+* Update `python-keycloak` version pins constraints by @viniciusdc in <https://github.com/nebari-dev/nebari/pull/2435>
+* add HERA_TOKEN env var to user pods by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2438>
+* fix docs link by @Adam-D-Lewis in <https://github.com/nebari-dev/nebari/pull/2443>
+* Update allowed admin groups by @aktech in <https://github.com/nebari-dev/nebari/pull/2429>
+
+**Full Changelog**: <https://github.com/nebari-dev/nebari/compare/2024.4.1...2024.5.1>
+
+## Release 2024.4.1 - April 20, 2024
+
+### What's Changed
+* update azurerm version by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2370
+* Get JupyterHub `groups` from Keycloak, support `oauthenticator` 16.3+ by @krassowski in https://github.com/nebari-dev/nebari/pull/2361
+* add full names for cloud providers in guided init by @exitflynn in https://github.com/nebari-dev/nebari/pull/2375
+* Add middleware to prefix JupyterHub navbar items with /hub. by @marcelovilla in https://github.com/nebari-dev/nebari/pull/2360
+* CLN: split #1928, refactor render test by @fangchenli in https://github.com/nebari-dev/nebari/pull/2246
+* add trailing slash for jupyterhub proxy paths by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2387
+* remove references to deprecated cdsdashboards by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2390
+* add default node groups to config by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2398
+* Update concurrency settings for Integration tests by @viniciusdc in https://github.com/nebari-dev/nebari/pull/2393
+* Make CI/CD Cloud Provider Test Conditional by @tylergraff in https://github.com/nebari-dev/nebari/pull/2369
+
+### New Contributors
+* @exitflynn made their first contribution in https://github.com/nebari-dev/nebari/pull/2375
+
+**Full Changelog**: https://github.com/nebari-dev/nebari/compare/2024.3.3...2024.4.1
+
+
+## Release 2024.3.3 - March 27, 2024
+
+### What's Changed
+* get default variable value when following a terraform variable by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2322
+* Upgrade Actions versions by @isumitjha in https://github.com/nebari-dev/nebari/pull/2291
+* Cleanup spawner logs by @krassowski in https://github.com/nebari-dev/nebari/pull/2328
+* Fix loki gateway url when deployed on non-dev namespace by @aktech in https://github.com/nebari-dev/nebari/pull/2327
+* Dmcandrew update ruamel.yaml by @dcmcand in https://github.com/nebari-dev/nebari/pull/2315
+* upgrade auth0-python version to ultimately resolve CVE-2024-26130 by @tylergraff in https://github.com/nebari-dev/nebari/pull/2314
+* remove deprecated code paths by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2349
+* Create SECURITY.md by @dcmcand in https://github.com/nebari-dev/nebari/pull/2354
+* Set node affinity for more pods to ensure they run on general node pool by @Adam-D-Lewis in https://github.com/nebari-dev/nebari/pull/2353
+* Deduplicate conda-store in JupyterLab main menu by @krassowski in https://github.com/nebari-dev/nebari/pull/2347
+* Pass current namespace to argo via environment variable by @krassowski in https://github.com/nebari-dev/nebari/pull/2317
+* PVC for Traefik Ingress (prevent LetsEncrypt throttling) by @kenafoster in https://github.com/nebari-dev/nebari/pull/2352
+
+### New Contributors
+* @isumitjha made their first contribution in https://github.com/nebari-dev/nebari/pull/2291
+* @tylergraff made their first contribution in https://github.com/nebari-dev/nebari/pull/2314
+
+**Full Changelog**: https://github.com/nebari-dev/nebari/compare/2024.3.2...2024.3.3
 
 ## Release 2024.3.2 - March 14, 2024
 

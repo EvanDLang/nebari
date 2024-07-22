@@ -19,8 +19,8 @@ locals {
   jhub_apps_secrets_name           = "jhub-apps-secrets"
   jhub_apps_env_var_name           = "JHUB_APP_JWT_SECRET_KEY"
   singleuser_nodeselector_key      = var.cloud-provider == "aws" ? "dedicated" : var.user-node-group.key
-  userscheduler_nodeselector_key   = var.cloud-provider == "aws" ? "dedicated" : var.user-node-group.key
-  userscheduler_nodeselector_value = var.cloud-provider == "aws" ? var.general-node-group.value : var.user-node-group.value
+  userscheduler_nodeselector_key   = var.cloud-provider == "aws" ? "dedicated" : var.general-node-group.key
+  userscheduler_nodeselector_value = var.general-node-group.value
 }
 
 resource "kubernetes_secret" "jhub_apps_secrets" {
@@ -57,7 +57,7 @@ resource "helm_release" "jupyterhub" {
 
   repository = "https://jupyterhub.github.io/helm-chart/"
   chart      = "jupyterhub"
-  version    = "3.2.1"
+  version    = "4.0.0-0.dev.git.6619.hd126b1bd"
 
   values = concat([
     file("${path.module}/values.yaml"),
@@ -130,6 +130,7 @@ resource "helm_release" "jupyterhub" {
           "01-theme.py"    = file("${path.module}/files/jupyterhub/01-theme.py")
           "02-spawner.py"  = file("${path.module}/files/jupyterhub/02-spawner.py")
           "03-profiles.py" = file("${path.module}/files/jupyterhub/03-profiles.py")
+          "04-auth.py"     = file("${path.module}/files/jupyterhub/04-auth.py")
         }
 
         services = {
@@ -143,25 +144,32 @@ resource "helm_release" "jupyterhub" {
         # for simple key value configuration with jupyterhub traitlets
         # this hub.config property should be used
         config = {
-          JupyterHub = {
-            authenticator_class = "generic-oauth"
-          }
           Authenticator = {
             enable_auth_state = true
           }
-          GenericOAuthenticator = {
-            client_id          = module.jupyterhub-openid-client.config.client_id
-            client_secret      = module.jupyterhub-openid-client.config.client_secret
-            oauth_callback_url = "https://${var.external-url}/hub/oauth_callback"
-            authorize_url      = module.jupyterhub-openid-client.config.authentication_url
-            token_url          = module.jupyterhub-openid-client.config.token_url
-            userdata_url       = module.jupyterhub-openid-client.config.userinfo_url
-            login_service      = "Keycloak"
-            username_key       = "preferred_username"
-            claim_groups_key   = "roles"
-            allowed_groups     = ["jupyterhub_admin", "jupyterhub_developer"]
-            admin_groups       = ["jupyterhub_admin"]
-            tls_verify         = false
+          KeyCloakOAuthenticator = {
+            client_id            = module.jupyterhub-openid-client.config.client_id
+            client_secret        = module.jupyterhub-openid-client.config.client_secret
+            oauth_callback_url   = "https://${var.external-url}/hub/oauth_callback"
+            authorize_url        = module.jupyterhub-openid-client.config.authentication_url
+            token_url            = module.jupyterhub-openid-client.config.token_url
+            userdata_url         = module.jupyterhub-openid-client.config.userinfo_url
+            realm_api_url        = module.jupyterhub-openid-client.config.realm_api_url
+            login_service        = "Keycloak"
+            username_claim       = "preferred_username"
+            claim_groups_key     = "groups"
+            claim_roles_key      = "roles"
+            allowed_groups       = ["/analyst", "/developer", "/admin", "jupyterhub_admin", "jupyterhub_developer"]
+            admin_groups         = ["/admin", "jupyterhub_admin"]
+            manage_groups        = true
+            manage_roles         = true
+            refresh_pre_spawn    = true
+            validate_server_cert = false
+
+            # deprecated, to be removed (replaced by validate_server_cert)
+            tls_verify = false
+            # deprecated, to be removed (replaced by username_claim)
+            username_key = "preferred_username"
           }
         }
       }
@@ -231,6 +239,28 @@ resource "kubernetes_manifest" "jupyterhub" {
               port = 80
             }
           ]
+          middlewares = [
+            {
+              name      = kubernetes_manifest.jupyterhub-proxy-add-slash.manifest.metadata.name
+              namespace = var.namespace
+            }
+          ]
+        },
+        {
+          kind  = "Rule"
+          match = "Host(`${var.external-url}`) && (PathPrefix(`/home`) || PathPrefix(`/token`) || PathPrefix(`/admin`))"
+          middlewares = [
+            {
+              name      = kubernetes_manifest.jupyterhub-middleware-addprefix.manifest.metadata.name
+              namespace = var.namespace
+            }
+          ]
+          services = [
+            {
+              name = "proxy-public"
+              port = 80
+            }
+          ]
         }
       ]
     }
@@ -254,6 +284,10 @@ module "jupyterhub-openid-client" {
     var.jupyterhub-logout-redirect-url
   ]
   jupyterlab_profiles_mapper = true
+  service-accounts-enabled   = true
+  service-account-roles = [
+    "view-realm", "view-users", "view-clients"
+  ]
 }
 
 
@@ -264,8 +298,9 @@ resource "kubernetes_secret" "argo-workflows-conda-store-token" {
   }
 
   data = {
-    "conda-store-api-token"    = var.conda-store-argo-workflows-jupyter-scheduler-token
-    "conda-store-service-name" = var.conda-store-service-name
+    "conda-store-api-token"         = var.conda-store-argo-workflows-jupyter-scheduler-token
+    "conda-store-service-name"      = var.conda-store-service-name
+    "conda-store-service-namespace" = var.namespace
   }
 
   type = "Opaque"

@@ -84,7 +84,7 @@ singleuser:
 # https://github.com/jupyterhub/jupyterhub-idle-culler#as-a-standalone-script
 #
 cull:
-  enabled: true
+  enabled: false
   users: false
   removeNamedServers: false
   timeout: 1800

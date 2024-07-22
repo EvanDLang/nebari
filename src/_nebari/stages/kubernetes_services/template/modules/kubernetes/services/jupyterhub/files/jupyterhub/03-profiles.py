@@ -426,7 +426,10 @@ def profile_argo_token(groups):
         "ARGO_BASE_HREF": "/argo",
         "ARGO_SERVER": f"{domain}:443",
         "ARGO_NAMESPACE": namespace,
-        "ARGO_TOKEN": {
+        "ARGO_TOKEN": "Bearer $(HERA_TOKEN)",
+        "ARGO_HTTP1": "true",  # Maybe due to traefik config, but `argo list` returns 404 without this set.  Try removing after upgrading argo past v3.4.4.
+        # Hera token is needed for versions of hera released before https://github.com/argoproj-labs/hera/pull/1053 is merged
+        "HERA_TOKEN": {
             "valueFrom": {
                 "secretKeyRef": {
                     "name": f"{argo_sa}.service-account-token",
@@ -452,6 +455,14 @@ def profile_conda_store_viewer_token():
                 "secretKeyRef": {
                     "name": "argo-workflows-conda-store-token",
                     "key": "conda-store-service-name",
+                }
+            }
+        },
+        "CONDA_STORE_SERVICE_NAMESPACE": {
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "argo-workflows-conda-store-token",
+                    "key": "conda-store-service-namespace",
                 }
             }
         },
@@ -533,14 +544,13 @@ def render_profiles(spawner):
     # userinfo request to have the groups in the key
     # "auth_state.oauth_user.groups"
     auth_state = yield spawner.user.get_auth_state()
-    spawner.log.error(str(auth_state))
 
     username = auth_state["oauth_user"]["preferred_username"]
     # only return the lowest level group name
     # e.g. /projects/myproj -> myproj
     # and /developers -> developers
     groups = [Path(group).name for group in auth_state["oauth_user"]["groups"]]
-    spawner.log.error(f"user info: {username} {groups}")
+    spawner.log.info(f"user info: {username} {groups}")
 
     keycloak_profilenames = auth_state["oauth_user"].get("jupyterlab_profiles", [])
 

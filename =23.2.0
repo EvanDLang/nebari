@@ -1,0 +1,19 @@
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: pyopenssl in /home/edlang/.local/lib/python3.10/site-packages (23.1.0)
+Collecting pyopenssl
+  Downloading pyOpenSSL-24.1.0-py3-none-any.whl (56 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 56.9/56.9 KB 465.9 kB/s eta 0:00:00
+Collecting cryptography<43,>=41.0.5
+  Using cached cryptography-42.0.8-cp39-abi3-manylinux_2_28_x86_64.whl (3.9 MB)
+Requirement already satisfied: cffi>=1.12 in /home/edlang/.local/lib/python3.10/site-packages (from cryptography<43,>=41.0.5->pyopenssl) (1.16.0)
+Requirement already satisfied: pycparser in /home/edlang/.local/lib/python3.10/site-packages (from cffi>=1.12->cryptography<43,>=41.0.5->pyopenssl) (2.21)
+Installing collected packages: cryptography, pyopenssl
+  Attempting uninstall: cryptography
+    Found existing installation: cryptography 40.0.2
+    Uninstalling cryptography-40.0.2:
+      Successfully uninstalled cryptography-40.0.2
+  Attempting uninstall: pyopenssl
+    Found existing installation: pyOpenSSL 23.1.0
+    Uninstalling pyOpenSSL-23.1.0:
+      Successfully uninstalled pyOpenSSL-23.1.0
+Successfully installed cryptography-42.0.8 pyopenssl-24.1.0
