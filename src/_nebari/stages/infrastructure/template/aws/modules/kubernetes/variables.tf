@@ -50,14 +50,16 @@ variable "node_group_additional_policies" {
 variable "node_groups" {
   description = "Node groups to add to EKS Cluster"
   type = list(object({
-    name          = string
-    instance_type = list(string)
-    gpu           = bool
-    min_size      = number
-    desired_size  = number
-    max_size      = number
+    name            = string
+    instance_type   = list(string)
+    gpu             = bool
+    min_size        = number
+    desired_size    = number
+    max_size        = number
+    single_subnet   = bool
+    launch_template = map(any)
+    ami_type        = string
     capacity_type = string
-    single_subnet = bool
   }))
 }
 
@@ -67,9 +69,20 @@ variable "node_group_instance_type" {
   default     = ["m5.large"]
 }
 
+variable "endpoint_public_access" {
+  type    = bool
+  default = true
+}
+
 variable "endpoint_private_access" {
   type    = bool
   default = false
+}
+
+variable "eks_kms_arn" {
+  description = "kms key arn for EKS cluster encryption_config"
+  type        = string
+  default     = null
 }
 
 variable "public_access_cidrs" {

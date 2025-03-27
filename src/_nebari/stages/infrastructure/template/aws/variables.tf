@@ -31,14 +31,16 @@ variable "kubernetes_version" {
 variable "node_groups" {
   description = "Node groups to add to EKS Cluster"
   type = list(object({
-    name          = string
-    instance_type = list(string)
-    gpu           = bool
-    min_size      = number
-    desired_size  = number
-    max_size      = number
+    name            = string
+    instance_type   = list(string)
+    gpu             = bool
+    min_size        = number
+    desired_size    = number
+    max_size        = number
+    single_subnet   = bool
+    launch_template = map(any)
+    ami_type        = string
     capacity_type = string
-    single_subnet = bool
   }))
 }
 
@@ -48,7 +50,7 @@ variable "availability_zones" {
 }
 
 variable "vpc_cidr_block" {
-  description = "VPC cidr block for infastructure"
+  description = "VPC cidr block for infrastructure"
   type        = string
 }
 
@@ -57,9 +59,21 @@ variable "kubeconfig_filename" {
   type        = string
 }
 
+variable "eks_endpoint_access" {
+  description = "EKS cluster api server endpoint access setting"
+  type        = string
+  default     = "public"
+}
+
 variable "eks_endpoint_private_access" {
   type    = bool
   default = false
+}
+
+variable "eks_kms_arn" {
+  description = "kms key arn for EKS cluster encryption_config"
+  type        = string
+  default     = null
 }
 
 variable "eks_public_access_cidrs" {
@@ -82,4 +96,9 @@ variable "tags" {
 variable "existing_efs" {
   description = "url for existing efs storage"
   type        = string
+}
+
+variable "efs_enabled" {
+  description = "Enable EFS"
+  type        = bool
 }

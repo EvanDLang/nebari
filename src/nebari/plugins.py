@@ -19,6 +19,7 @@ DEFAULT_SUBCOMMAND_PLUGINS = [
     "_nebari.subcommands.deploy",
     "_nebari.subcommands.destroy",
     "_nebari.subcommands.keycloak",
+    "_nebari.subcommands.plugin",
     "_nebari.subcommands.render",
     "_nebari.subcommands.support",
     "_nebari.subcommands.upgrade",
@@ -36,6 +37,8 @@ DEFAULT_STAGES_PLUGINS = [
     "_nebari.stages.kubernetes_keycloak_configuration",
     "_nebari.stages.kubernetes_services",
     "_nebari.stages.nebari_tf_extensions",
+    "_nebari.stages.kubernetes_kuberhealthy",
+    "_nebari.stages.kubernetes_kuberhealthy_healthchecks",
 ]
 
 
@@ -118,6 +121,14 @@ class NebariPluginManager:
         from _nebari.config import read_configuration
 
         return read_configuration(config_path, self.config_schema, **kwargs)
+
+    def get_external_plugins(self):
+        external_plugins = []
+        all_plugins = DEFAULT_SUBCOMMAND_PLUGINS + DEFAULT_STAGES_PLUGINS
+        for plugin in self.plugin_manager.get_plugins():
+            if plugin.__name__ not in all_plugins:
+                external_plugins.append(plugin.__name__)
+        return external_plugins
 
     @property
     def ordered_stages(self):

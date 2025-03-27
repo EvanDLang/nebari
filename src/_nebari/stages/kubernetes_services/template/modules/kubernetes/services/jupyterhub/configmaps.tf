@@ -47,12 +47,30 @@ resource "local_file" "jupyter_jupyterlab_pioneer_config_py" {
   }
 }
 
+resource "local_sensitive_file" "jupyter_gallery_config_json" {
+  content = jsonencode({
+    "GalleryManager" = var.jupyterlab-gallery-settings
+  })
+  filename = "${path.module}/files/jupyter/jupyter_gallery_config.json"
+}
+
 
 resource "local_file" "overrides_json" {
   content  = jsonencode(local.jupyterlab-overrides-json-object)
   filename = "${path.module}/files/jupyterlab/overrides.json"
 }
 
+resource "local_file" "page_config_json" {
+  content = jsonencode({
+    "disabledExtensions" : {
+      "jupyterlab-jhub-apps" : !var.jhub-apps-enabled
+    },
+    # `lockedExtensions` is an empty dict to signify that `jupyterlab-jhub-apps` is not being disabled and locked (but only disabled)
+    # which means users are still allowed to disable the jupyterlab-jhub-apps extension (if they have write access to page_config).
+    "lockedExtensions" : {}
+  })
+  filename = "${path.module}/files/jupyterlab/page_config.json"
+}
 
 resource "kubernetes_config_map" "etc-ipython" {
   metadata {
@@ -70,7 +88,8 @@ resource "kubernetes_config_map" "etc-ipython" {
 locals {
   etc-jupyter-config-data = merge(
     {
-      "jupyter_server_config.py" = local_file.jupyter_server_config_py.content,
+      "jupyter_server_config.py"    = local_file.jupyter_server_config_py.content,
+      "jupyter_gallery_config.json" = local_sensitive_file.jupyter_gallery_config_json.content,
     },
     var.jupyterlab-pioneer-enabled ? {
       # quotes are must here, as terraform would otherwise think py is a property of
@@ -84,12 +103,16 @@ locals {
   etc-jupyterlab-settings = {
     "overrides.json" = local_file.overrides_json.content
   }
+  etc-jupyterlab-page-config = {
+    "page_config.json" = local_file.page_config_json.content
+  }
 }
 
 resource "kubernetes_config_map" "etc-jupyter" {
   depends_on = [
     local_file.jupyter_server_config_py,
-    local_file.jupyter_jupyterlab_pioneer_config_py
+    local_file.jupyter_jupyterlab_pioneer_config_py,
+    local_sensitive_file.jupyter_gallery_config_json
   ]
 
   metadata {
@@ -125,6 +148,20 @@ resource "kubernetes_config_map" "jupyterlab-settings" {
   }
 
   data = local.etc-jupyterlab-settings
+}
+
+
+resource "kubernetes_config_map" "jupyterlab-page-config" {
+  depends_on = [
+    local_file.page_config_json
+  ]
+
+  metadata {
+    name      = "jupyterlab-page-config"
+    namespace = var.namespace
+  }
+
+  data = local.etc-jupyterlab-page-config
 }
 
 resource "kubernetes_config_map" "git_clone_update" {

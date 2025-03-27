@@ -5,6 +5,9 @@ data "google_compute_zones" "gcpzones" {
 
 module "registry-jupyterhub" {
   source = "./modules/registry"
+
+  repository_id = "${var.name}-${var.environment}"
+  location      = var.region
 }
 
 
@@ -36,4 +39,5 @@ module "kubernetes" {
   release_channel                   = var.release_channel
   tags                              = var.tags
   labels                            = var.labels
+  node_group_image_type             = var.node_group_image_type
 }

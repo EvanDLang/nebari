@@ -1,0 +1,19 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Principal": {
+          "Federated": "arn:aws:iam::445567107118:oidc/id/72EB2402346C096AA7FF00D6D9B57238/sts.amazonaws.com"
+        },
+        "Condition": {
+          "StringEquals": {
+            "eks.amazonaws.com/namespace": "kube-system",
+            "eks.amazonaws.com/serviceaccount": "aws-load-balancer-controller"
+          }
+        }
+      }
+    ]
+  }
+  

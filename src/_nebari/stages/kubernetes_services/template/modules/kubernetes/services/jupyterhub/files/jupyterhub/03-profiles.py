@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import z2jh
-from tornado import gen
 
 
 def base_profile_home_mounts(username):
@@ -48,10 +47,16 @@ def base_profile_home_mounts(username):
     }
 
     MKDIR_OWN_DIRECTORY = (
-        "mkdir -p /mnt/{path} && chmod 777 /mnt/{path} && cp -r /etc/skel/. /mnt/{path}"
+        "mkdir -p /mnt/{path} && chmod 777 /mnt/{path} && "
+        # Copy skel files/folders not starting with '..' to user home directory.
+        # Filtering out ..* removes some unneeded folders (k8s configmap mount implementation details).
+        "find /etc/skel/. -maxdepth 1 -not -name '.' -not -name '..*' -exec "
+        "cp -rL {escaped_brackets} /mnt/{path} \\;"
     )
     command = MKDIR_OWN_DIRECTORY.format(
-        path=pvc_home_mount_path.format(username=username)
+        # have to escape the brackets since this string will be formatted later by KubeSpawner
+        escaped_brackets="{{}}",
+        path=pvc_home_mount_path.format(username=username),
     )
     init_containers = [
         {
@@ -76,11 +81,11 @@ def base_profile_home_mounts(username):
     }
 
 
-def base_profile_shared_mounts(groups):
+def base_profile_shared_mounts(groups_to_volume_mount):
     """Configure the group directory mounts for user.
 
-    Ensure that {shared}/{group} directory exists and user has
-    permissions to read/write/execute. Kubernetes does not allow the
+    Ensure that {shared}/{group} directory exists based on the scope availability
+    and if user has permissions to read/write/execute. Kubernetes does not allow the
     same pvc to be a volume thus we must check that the home and share
     pvc are not the same for some operation.
 
@@ -97,40 +102,42 @@ def base_profile_shared_mounts(groups):
             {"name": "shared", "persistentVolumeClaim": {"claimName": shared_pvc_name}}
         )
 
-    extra_container_config = {
-        "volumeMounts": [
-            {
-                "mountPath": pod_shared_mount_path.format(group=group),
-                "name": "shared" if home_pvc_name != shared_pvc_name else "home",
-                "subPath": pvc_shared_mount_path.format(group=group),
-            }
-            for group in groups
-        ]
-    }
+    extra_container_config = {"volumeMounts": []}
 
     MKDIR_OWN_DIRECTORY = "mkdir -p /mnt/{path} && chmod 777 /mnt/{path}"
     command = " && ".join(
         [
             MKDIR_OWN_DIRECTORY.format(path=pvc_shared_mount_path.format(group=group))
-            for group in groups
+            for group in groups_to_volume_mount
         ]
     )
+
     init_containers = [
         {
             "name": "initialize-shared-mounts",
             "image": "busybox:1.31",
             "command": ["sh", "-c", command],
             "securityContext": {"runAsUser": 0},
-            "volumeMounts": [
-                {
-                    "mountPath": f"/mnt/{pvc_shared_mount_path.format(group=group)}",
-                    "name": "shared" if home_pvc_name != shared_pvc_name else "home",
-                    "subPath": pvc_shared_mount_path.format(group=group),
-                }
-                for group in groups
-            ],
+            "volumeMounts": [],
         }
     ]
+
+    for group in groups_to_volume_mount:
+        extra_container_config["volumeMounts"].append(
+            {
+                "mountPath": pod_shared_mount_path.format(group=group),
+                "name": "shared" if home_pvc_name != shared_pvc_name else "home",
+                "subPath": pvc_shared_mount_path.format(group=group),
+            }
+        )
+        init_containers[0]["volumeMounts"].append(
+            {
+                "mountPath": f"/mnt/{pvc_shared_mount_path.format(group=group)}",
+                "name": "shared" if home_pvc_name != shared_pvc_name else "home",
+                "subPath": pvc_shared_mount_path.format(group=group),
+            }
+        )
+
     return {
         "extra_pod_config": extra_pod_config,
         "extra_container_config": extra_container_config,
@@ -469,7 +476,9 @@ def profile_conda_store_viewer_token():
     }
 
 
-def render_profile(profile, username, groups, keycloak_profilenames):
+def render_profile(
+    profile, username, groups, keycloak_profilenames, groups_to_volume_mount
+):
     """Render each profile for user.
 
     If profile is not available for given username, groups returns
@@ -502,69 +511,68 @@ def render_profile(profile, username, groups, keycloak_profilenames):
             return None
 
     profile = copy.copy(profile)
-    profile_kubespawner_override = profile.get("kubespawner_override")
     profile["kubespawner_override"] = functools.reduce(
         deep_merge,
         [
             base_profile_home_mounts(username),
-            base_profile_shared_mounts(groups),
+            base_profile_shared_mounts(groups_to_volume_mount),
             profile_conda_store_mounts(username, groups),
             base_profile_extra_mounts(),
             configure_user(username, groups),
             configure_user_provisioned_repositories(username),
-            profile_kubespawner_override,
+            profile.get("kubespawner_override"),
         ],
         {},
     )
 
-    # We need to merge any env vars from the spawner with any overrides from the profile
-    # This is mainly to ensure JUPYTERHUB_ANYONE/GROUP is passed through from the spawner
-    # to control dashboard access.
-    envvars_fixed = {**(profile["kubespawner_override"].get("environment", {}))}
-
-    def preserve_envvars(spawner):
-        # This adds in JUPYTERHUB_ANYONE/GROUP rather than overwrite all env vars,
-        # if set in the spawner for a dashboard to control access.
-        return {
-            **envvars_fixed,
-            **spawner.environment,
+    profile["kubespawner_override"]["environment"].update(
+        {
             **profile_argo_token(groups),
             **profile_conda_store_viewer_token(),
         }
-
-    profile["kubespawner_override"]["environment"] = preserve_envvars
+    )
 
     return profile
 
 
-@gen.coroutine
-def render_profiles(spawner):
+async def render_profiles(spawner):
     # jupyterhub does not yet manage groups but it will soon
     # so for now we rely on auth_state from the keycloak
     # userinfo request to have the groups in the key
     # "auth_state.oauth_user.groups"
-    auth_state = yield spawner.user.get_auth_state()
+    auth_state = await spawner.user.get_auth_state()
 
     username = auth_state["oauth_user"]["preferred_username"]
+
     # only return the lowest level group name
     # e.g. /projects/myproj -> myproj
     # and /developers -> developers
     groups = [Path(group).name for group in auth_state["oauth_user"]["groups"]]
-    spawner.log.info(f"user info: {username} {groups}")
+    groups_with_permission_to_mount = [
+        Path(group).name
+        for group in auth_state.get("groups_with_permission_to_mount", [])
+    ]
 
     keycloak_profilenames = auth_state["oauth_user"].get("jupyterlab_profiles", [])
 
     # fetch available profiles and render additional attributes
     profile_list = z2jh.get_config("custom.profiles")
-    return list(
+    rendered_profiles = list(
         filter(
             None,
             [
-                render_profile(p, username, groups, keycloak_profilenames)
+                render_profile(
+                    p,
+                    username,
+                    groups,
+                    keycloak_profilenames,
+                    groups_with_permission_to_mount,
+                )
                 for p in profile_list
             ],
         )
     )
+    return rendered_profiles
 
 
 c.KubeSpawner.args = ["--debug"]

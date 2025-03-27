@@ -163,7 +163,7 @@ resource "helm_release" "node_termination_handler_release" {
       awsRegion = var.aws_region
 
       nodeSelector = {
-        "${var.node_group.key}" = var.node_group.value
+        "eks.amazonaws.com/nodegroup" =  "general"
       }
 
     })

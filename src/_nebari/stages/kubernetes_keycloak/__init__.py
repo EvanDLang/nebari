@@ -8,7 +8,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Type, Union
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from _nebari.stages.base import NebariTerraformStage
 from _nebari.stages.tf_objects import (
@@ -34,7 +34,7 @@ class InputVars(schema.Base):
     existing_realm: bool = False
     keycloak_nebari_bot_password: str
     keycloak_view_only_user_password: str
-    
+    themes: Dict[str, Union[bool, str]]
 
 
 @contextlib.contextmanager
@@ -145,6 +145,23 @@ def random_secure_string(
     return "".join(secrets.choice(chars) for i in range(length))
 
 
+class KeycloakThemes(schema.Base):
+    enabled: bool = False
+    repository: Optional[str] = ""
+    branch: Optional[str] = "main"
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_fields_dependencies(cls, data: Any) -> Any:
+        # Raise and error if themes are enabled but repository or branch are not set
+        if isinstance(data, dict) and data.get("enabled"):
+            if not data.get("repository") or not data.get("branch"):
+                raise ValueError(
+                    "Repository and branch are both required when themes is enabled."
+                )
+        return data
+
+
 class Keycloak(schema.Base):
     existing_realm: bool = False
     initial_root_password: str = Field(default_factory=random_secure_string)
@@ -152,6 +169,7 @@ class Keycloak(schema.Base):
     realm_display_name: str = "Nebari"
     keycloak_nebari_bot_password: str = Field(default_factory=random_secure_string)
     keycloak_view_only_user_password: str = Field(default_factory=random_secure_string)
+    themes: KeycloakThemes = Field(default_factory=lambda: KeycloakThemes())
 
 
 auth_enum_to_model = {
@@ -243,6 +261,7 @@ class KubernetesKeycloakStage(NebariTerraformStage):
             node_group=stage_outputs["stages/02-infrastructure"]["node_selectors"][
                 "general"
             ],
+            themes=self.config.security.keycloak.themes.model_dump(),
         ).model_dump()
 
     def check(

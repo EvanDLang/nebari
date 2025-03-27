@@ -14,12 +14,11 @@ module "kubernetes-autoscaling" {
 
   aws_region   = var.aws_region
   cluster-name = local.cluster_name
-  node_group  = var.node_groups.general
 }
 
-module "traefik-crds" {
-  source = "./modules/traefik_crds"
-}
+#module "traefik-crds" {
+#  source = "./modules/traefik_crds"
+#}
 
 module "nvidia-driver-installer" {
   count = var.gpu_enabled ? 1 : 0
@@ -37,7 +36,6 @@ module "node-termination-handler" {
   namespace = var.environment
   aws_region   = var.aws_region
   cluster_name = local.cluster_name
-  node_group  = var.node_groups.general
 }
 
 module "s3" {

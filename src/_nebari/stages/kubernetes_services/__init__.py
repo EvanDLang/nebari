@@ -5,7 +5,14 @@ import time
 from typing import Any, Dict, List, Optional, Type, Union
 from urllib.parse import urlencode
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from typing_extensions import Self
 
 from _nebari import constants
 from _nebari.stages.base import NebariTerraformStage
@@ -14,7 +21,11 @@ from _nebari.stages.tf_objects import (
     NebariKubernetesProvider,
     NebariTerraformState,
 )
-from _nebari.utils import set_docker_image_tag, set_nebari_dask_version
+from _nebari.utils import (
+    byte_unit_conversion,
+    set_docker_image_tag,
+    set_nebari_dask_version,
+)
 from _nebari.version import __version__
 from nebari import schema
 from nebari.hookspecs import NebariStage, hookimpl
@@ -38,6 +49,17 @@ class AccessEnum(str, enum.Enum):
         return representer.represent_str(node.value)
 
 
+@schema.yaml_object(schema.yaml)
+class SharedFsEnum(str, enum.Enum):
+    nfs = "nfs"
+    cephfs = "cephfs"
+    efs = "efs"
+
+    @classmethod
+    def to_yaml(cls, representer, node):
+        return representer.represent_str(node.value)
+
+
 class DefaultImages(schema.Base):
     jupyterhub: str = f"quay.io/nebari/nebari-jupyterhub:{set_docker_image_tag()}"
     jupyterlab: str = f"quay.io/nebari/nebari-jupyterlab:{set_docker_image_tag()}"
@@ -45,6 +67,10 @@ class DefaultImages(schema.Base):
 
 
 class Storage(schema.Base):
+    type: SharedFsEnum = Field(
+        default=None,
+        json_schema_extra={"immutable": True},
+    )
     conda_store: str = "200Gi"
     shared_filesystem: str = "200Gi"
 
@@ -90,6 +116,42 @@ class KubeSpawner(schema.Base):
     model_config = ConfigDict(extra="allow")
 
 
+class ProfileOptionUnlistedChoice(schema.Base):
+    enabled: bool = False
+    display_name: str
+    display_name_in_choices: Optional[str] = None
+    validation_regex: Optional[str] = None
+    validation_message: Optional[str] = None
+    kubespawner_override: Dict[str, Any]
+
+
+class ProfileOptionChoice(schema.Base):
+    display_name: str
+    default: Optional[bool] = False
+    kubespawner_override: Dict[str, Any]
+
+
+class ProfileOption(schema.Base):
+    display_name: str
+    unlisted_choice: Optional[ProfileOptionUnlistedChoice] = None
+    choices: Dict[str, ProfileOptionChoice]
+
+    @field_validator("choices")
+    def validate_choices(cls, v):
+        defaults = [choice for choice in v.values() if choice.default]
+        if len(defaults) > 1:
+            raise ValueError("Only one choice can be marked as default")
+        return v
+
+    # We need to exclude unlisted_choice if not set.
+    # This was the recommended solution without affecting the parent.
+    # reference: https://github.com/pydantic/pydantic/discussions/7315
+    @model_serializer(mode="wrap")
+    def serialize_model(self, handler) -> dict[str, Any]:
+        result = handler(self)
+        return {k: v for k, v in result.items() if v is not None}
+
+
 class JupyterLabProfile(schema.Base):
     access: AccessEnum = AccessEnum.all
     display_name: str
@@ -98,6 +160,7 @@ class JupyterLabProfile(schema.Base):
     users: Optional[List[str]] = None
     groups: Optional[List[str]] = None
     kubespawner_override: Optional[KubeSpawner] = None
+    profile_options: dict[str, ProfileOption] = {}
 
     @model_validator(mode="after")
     def only_yaml_can_have_groups_and_users(self):
@@ -199,6 +262,7 @@ class ArgoWorkflows(schema.Base):
 
 class JHubApps(schema.Base):
     enabled: bool = False
+    overrides: Dict = {}
 
 
 class MonitoringOverrides(schema.Base):
@@ -207,10 +271,16 @@ class MonitoringOverrides(schema.Base):
     minio: Dict = {}
 
 
+class Healthchecks(schema.Base):
+    enabled: bool = False
+    kuberhealthy_helm_version: str = constants.KUBERHEALTHY_HELM_VERSION
+
+
 class Monitoring(schema.Base):
     enabled: bool = True
     overrides: MonitoringOverrides = MonitoringOverrides()
     minio_enabled: bool = True
+    healthchecks: Healthchecks = Healthchecks()
 
 
 class JupyterLabPioneer(schema.Base):
@@ -236,11 +306,35 @@ class IdleCuller(schema.Base):
     server_shutdown_no_activity_timeout: int = 15
 
 
+class JupyterLabGalleryExhibit(schema.Base):
+    git: str
+    title: str
+    homepage: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    account: Optional[str] = None
+    token: Optional[str] = None
+    branch: Optional[str] = None
+    depth: Optional[int] = None
+
+
+class JupyterLabGallerySettings(schema.Base):
+    title: str = "Examples"
+    destination: str = "examples"
+    exhibits: List[JupyterLabGalleryExhibit] = []
+    hide_gallery_without_exhibits: bool = True
+
+
 class JupyterLab(schema.Base):
     default_settings: Dict[str, Any] = {}
+    gallery_settings: JupyterLabGallerySettings = JupyterLabGallerySettings()
     idle_culler: IdleCuller = IdleCuller()
     initial_repositories: List[Dict[str, str]] = []
     preferred_dir: Optional[str] = None
+
+
+class RookCeph(schema.Base):
+    storage_class_name: None | str = None
 
 
 class InputSchema(schema.Base):
@@ -692,6 +786,35 @@ class InputSchema(schema.Base):
     jupyterhub: JupyterHub = JupyterHub()
     jupyterlab: JupyterLab = JupyterLab()
     jhub_apps: JHubApps = JHubApps()
+    ceph: RookCeph = RookCeph()
+
+    def _set_storage_type_default_value(self):
+        if self.storage.type is None:
+            if self.provider == schema.ProviderEnum.aws:
+                self.storage.type = SharedFsEnum.efs
+            else:
+                self.storage.type = SharedFsEnum.nfs
+
+    @model_validator(mode="after")
+    def custom_validation(self) -> Self:
+        self._set_storage_type_default_value()
+
+        if (
+            self.storage.type == SharedFsEnum.cephfs
+            and self.provider == schema.ProviderEnum.local
+        ):
+            raise ValueError(
+                f'storage.type: "{self.storage.type.value}" is not supported for provider: "{self.provider.value}"'
+            )
+
+        if (
+            self.storage.type == SharedFsEnum.efs
+            and self.provider != schema.ProviderEnum.aws
+        ):
+            raise ValueError(
+                f'storage.type: "{self.storage.type.value}" is only supported for provider: "{schema.ProviderEnum.aws.value}"'
+            )
+        return self
 
 
 class OutputSchema(schema.Base):
@@ -720,12 +843,18 @@ class ImageNameTag(schema.Base):
     tag: str
 
 
+class RookCephInputVars(schema.Base):
+    rook_ceph_storage_class_name: None | str = None
+
+
 class CondaStoreInputVars(schema.Base):
     conda_store_environments: Dict[str, CondaEnvironment] = Field(
         alias="conda-store-environments"
     )
     conda_store_default_namespace: str = Field(alias="conda-store-default-namespace")
-    conda_store_filesystem_storage: str = Field(alias="conda-store-filesystem-storage")
+    conda_store_filesystem_storage: float = Field(
+        alias="conda-store-filesystem-storage"
+    )
     conda_store_object_storage: str = Field(alias="conda-store-object-storage")
     conda_store_extra_settings: Dict[str, Any] = Field(
         alias="conda-store-extra-settings"
@@ -737,6 +866,11 @@ class CondaStoreInputVars(schema.Base):
         alias="conda-store-service-token-scopes"
     )
 
+    @field_validator("conda_store_filesystem_storage", mode="before")
+    @classmethod
+    def handle_units(cls, value: Optional[str]) -> float:
+        return byte_unit_conversion(value, "GiB")
+
 
 class JupyterhubInputVars(schema.Base):
     jupyterhub_theme: Dict[str, Any] = Field(alias="jupyterhub-theme")
@@ -744,9 +878,12 @@ class JupyterhubInputVars(schema.Base):
     jupyterlab_default_settings: Dict[str, Any] = Field(
         alias="jupyterlab-default-settings"
     )
+    jupyterlab_gallery_settings: JupyterLabGallerySettings = Field(
+        alias="jupyterlab-gallery-settings"
+    )
     initial_repositories: str = Field(alias="initial-repositories")
     jupyterhub_overrides: List[str] = Field(alias="jupyterhub-overrides")
-    jupyterhub_stared_storage: str = Field(alias="jupyterhub-shared-storage")
+    jupyterhub_shared_storage: float = Field(alias="jupyterhub-shared-storage")
     jupyterhub_shared_endpoint: Optional[str] = Field(
         alias="jupyterhub-shared-endpoint", default=None
     )
@@ -756,8 +893,15 @@ class JupyterhubInputVars(schema.Base):
     idle_culler_settings: Dict[str, Any] = Field(alias="idle-culler-settings")
     argo_workflows_enabled: bool = Field(alias="argo-workflows-enabled")
     jhub_apps_enabled: bool = Field(alias="jhub-apps-enabled")
+    jhub_apps_overrides: str = Field(alias="jhub-apps-overrides")
     cloud_provider: str = Field(alias="cloud-provider")
     jupyterlab_preferred_dir: Optional[str] = Field(alias="jupyterlab-preferred-dir")
+    shared_fs_type: SharedFsEnum
+
+    @field_validator("jupyterhub_shared_storage", mode="before")
+    @classmethod
+    def handle_units(cls, value: Optional[str]) -> float:
+        return byte_unit_conversion(value, "GiB")
 
 
 class DaskGatewayInputVars(schema.Base):
@@ -844,6 +988,12 @@ class KubernetesServicesStage(NebariTerraformStage):
                     "*/*": ["viewer"],
                 },
             },
+            "conda-store-service-account": {
+                "primary_namespace": "",
+                "role_bindings": {
+                    "*/*": ["admin"],
+                },
+            },
         }
 
         # Compound any logout URLs from extensions so they are are logged out in succession
@@ -875,6 +1025,8 @@ class KubernetesServicesStage(NebariTerraformStage):
             ),
         )
 
+        rook_ceph_vars = RookCephInputVars()
+
         conda_store_vars = CondaStoreInputVars(
             conda_store_environments={
                 k: v.model_dump() for k, v in self.config.environments.items()
@@ -894,7 +1046,7 @@ class KubernetesServicesStage(NebariTerraformStage):
             jupyterlab_image=_split_docker_image_name(
                 self.config.default_images.jupyterlab
             ),
-            jupyterhub_stared_storage=self.config.storage.shared_filesystem,
+            jupyterhub_shared_storage=self.config.storage.shared_filesystem,
             jupyterhub_shared_endpoint=jupyterhub_shared_endpoint,
             cloud_provider=cloud_provider,
             jupyterhub_profiles=self.config.profiles.model_dump()["jupyterlab"],
@@ -908,9 +1060,17 @@ class KubernetesServicesStage(NebariTerraformStage):
             idle_culler_settings=self.config.jupyterlab.idle_culler.model_dump(),
             argo_workflows_enabled=self.config.argo_workflows.enabled,
             jhub_apps_enabled=self.config.jhub_apps.enabled,
+            jhub_apps_overrides=json.dumps(self.config.jhub_apps.overrides),
             initial_repositories=str(self.config.jupyterlab.initial_repositories),
             jupyterlab_default_settings=self.config.jupyterlab.default_settings,
+            jupyterlab_gallery_settings=self.config.jupyterlab.gallery_settings,
             jupyterlab_preferred_dir=self.config.jupyterlab.preferred_dir,
+            shared_fs_type=(
+                # efs is equivalent to nfs in these modules
+                SharedFsEnum.nfs
+                if self.config.storage.type == SharedFsEnum.efs
+                else self.config.storage.type
+            ),
         )
 
         dask_gateway_vars = DaskGatewayInputVars(
@@ -948,6 +1108,7 @@ class KubernetesServicesStage(NebariTerraformStage):
 
         return {
             **kubernetes_services_vars.model_dump(by_alias=True),
+            **rook_ceph_vars.model_dump(by_alias=True),
             **conda_store_vars.model_dump(by_alias=True),
             **jupyterhub_vars.model_dump(by_alias=True),
             **dask_gateway_vars.model_dump(by_alias=True),

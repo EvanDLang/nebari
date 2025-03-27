@@ -62,12 +62,11 @@ def test_render_schema(nebari_config):
             "fake",
             pytest.raises(
                 ValueError,
-                match="'fake' is not a valid enumeration member; permitted: local, existing, do, aws, gcp, azure",
+                match="'fake' is not a valid enumeration member; permitted: local, existing, aws, gcp, azure",
             ),
         ),
         ("aws", nullcontext()),
         ("gcp", nullcontext()),
-        ("do", nullcontext()),
         ("azure", nullcontext()),
         ("existing", nullcontext()),
         ("local", nullcontext()),
@@ -103,11 +102,6 @@ def test_provider_validation(config_schema, provider, exception):
             },
         ),
         (
-            "do",
-            "digital_ocean",
-            {"region": "nyc3", "kubernetes_version": "1.19.2-do.3"},
-        ),
-        (
             "azure",
             "azure",
             {
@@ -139,7 +133,7 @@ def test_multiple_providers(config_schema):
         config_schema(**config_dict)
 
 
-def test_aws_premissions_boundary(config_schema):
+def test_aws_permissions_boundary(config_schema):
     permissions_boundary = "arn:aws:iam::123456789012:policy/MyBoundaryPolicy"
     config_dict = {
         "project_name": "test",
@@ -156,7 +150,7 @@ def test_aws_premissions_boundary(config_schema):
 
 
 @pytest.mark.parametrize("provider", ["local", "existing"])
-def test_setted_provider(config_schema, provider):
+def test_set_provider(config_schema, provider):
     config_dict = {
         "project_name": "test",
         "provider": provider,
@@ -167,3 +161,13 @@ def test_setted_provider(config_schema, provider):
     result_config_dict = config.model_dump()
     assert provider in result_config_dict
     assert result_config_dict[provider]["kube_context"] == "some_context"
+
+
+def test_provider_config_mismatch_warning(config_schema):
+    config_dict = {
+        "project_name": "test",
+        "provider": "local",
+        "existing": {"kube_context": "some_context"},  # <-- Doesn't match the provider
+    }
+    with pytest.warns(UserWarning, match="configuration defined for other providers"):
+        config_schema(**config_dict)

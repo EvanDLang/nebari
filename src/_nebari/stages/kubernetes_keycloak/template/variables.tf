@@ -41,3 +41,12 @@ variable "existing_realm" {
   description = "flag that represents if the nebari keycloak realm already exists"
   type = string
 }
+
+variable "themes" {
+  description = "Custom themes configuration for keycloak"
+  type = object({
+    enabled    = bool
+    repository = string
+    branch     = string
+  })
+}

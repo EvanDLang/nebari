@@ -1,8 +1,11 @@
 import contextlib
+import enum
 import functools
+import json
 import os
 import re
 import secrets
+import selectors
 import signal
 import string
 import subprocess
@@ -11,8 +14,9 @@ import threading
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
+import rich
 from ruamel.yaml import YAML
 
 from _nebari import constants
@@ -44,13 +48,98 @@ def change_directory(directory):
     os.chdir(current_directory)
 
 
-def run_subprocess_cmd(processargs, **kwargs):
+def strip_ansi_errors(line):
+    """Strips ANSI escape codes from a string."""
+    ansi_escape = re.compile(rb"\x1b\[[0-9;]*[mK]")
+    return ansi_escape.sub(b"", line)
+
+
+def process_streams(
+    process, line_prefix, strip_errors, print_stdout=True, print_stderr=True
+):
+    sel = selectors.DefaultSelector()
+    sel.register(process.stdout, selectors.EVENT_READ, data="stdout")
+    if process.stderr and process.stderr != process.stdout:
+        sel.register(process.stderr, selectors.EVENT_READ, data="stderr")
+
+    outputs = {"stdout": [], "stderr": []}
+    partial = {"stdout": b"", "stderr": b""}
+    reset_code = b"\x1b[0m"  # ANSI reset code
+
+    try:
+        while True:
+            events = sel.select(timeout=0.1)
+            if not events and process.poll() is not None:
+                # Handle any remaining partial output
+                for stream_name in ["stdout", "stderr"]:
+                    if partial[stream_name]:
+                        line = partial[stream_name]
+                        if strip_errors:
+                            line = strip_ansi_errors(line)
+                        outputs[stream_name].append(line)
+                break
+
+            for key, _ in events:
+                data = key.fileobj.read1(8192)
+                if not data:
+                    sel.unregister(key.fileobj)
+                    continue
+
+                stream_name = key.data
+                chunk = partial[stream_name] + data
+                lines = chunk.split(b"\n")
+                partial[stream_name] = lines[-1]
+
+                for line in lines[:-1]:
+                    line_w_newline = line + b"\n"
+                    if strip_errors:
+                        line_w_newline = strip_ansi_errors(line_w_newline)
+
+                    # Handle stdout
+                    if stream_name == "stdout":
+                        if print_stdout:
+                            sys.stdout.buffer.write(line_prefix + line_w_newline)
+                            sys.stdout.flush()
+                        else:
+                            outputs["stdout"].append(line_w_newline)
+
+                    # Handle stderr
+                    if stream_name == "stderr":
+                        if print_stderr:
+                            sys.stderr.buffer.write(line_prefix + line_w_newline)
+                            sys.stderr.flush()
+                        else:
+                            outputs["stderr"].append(line_w_newline)
+
+        # Add reset code when we're done processing output
+        if print_stdout:
+            sys.stdout.buffer.write(reset_code)
+            sys.stdout.flush()
+        if print_stderr:
+            sys.stderr.buffer.write(reset_code)
+            sys.stderr.flush()
+
+    finally:
+        sel.close()
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
+            process.stderr.close()
+
+    return outputs["stdout"], outputs["stderr"]
+
+
+def run_subprocess_cmd(processargs, prefix=b"", capture_output=False, **kwargs):
     """Runs subprocess command with realtime stdout logging with optional line prefix."""
-    if "prefix" in kwargs:
-        line_prefix = f"[{kwargs['prefix']}]: ".encode("utf-8")
-        kwargs.pop("prefix")
+    if prefix:
+        line_prefix = f"[{prefix}]: ".encode("utf-8")
     else:
         line_prefix = b""
+
+    if capture_output:
+        stderr_stream = subprocess.PIPE
+    else:
+        stderr_stream = subprocess.STDOUT
 
     timeout = 0
     if "timeout" in kwargs:
@@ -62,9 +151,10 @@ def run_subprocess_cmd(processargs, **kwargs):
         processargs,
         **kwargs,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=stderr_stream,
         preexec_fn=os.setsid,
     )
+
     # Set timeout thread
     timeout_timer = None
     if timeout > 0:
@@ -78,25 +168,26 @@ def run_subprocess_cmd(processargs, **kwargs):
         timeout_timer = threading.Timer(timeout, kill_process)
         timeout_timer.start()
 
-    for line in iter(lambda: process.stdout.readline(), b""):
-        full_line = line_prefix + line
-        if strip_errors:
-            full_line = full_line.decode("utf-8")
-            full_line = re.sub(
-                r"\x1b\[31m", "", full_line
-            )  # Remove red ANSI escape code
-            full_line = full_line.encode("utf-8")
-
-        sys.stdout.buffer.write(full_line)
-        sys.stdout.flush()
+    if capture_output:
+        output, _ = process_streams(
+            process, line_prefix, strip_errors, print_stdout=False, print_stderr=True
+        )
+    else:
+        process_streams(
+            process, line_prefix, strip_errors, print_stdout=True, print_stderr=True
+        )
 
     if timeout_timer is not None:
         timeout_timer.cancel()
 
-    process.stdout.close()
-    return process.wait(
+    exit_code = process.wait(
         timeout=10
     )  # Should already have finished because we have drained stdout
+
+    if capture_output:
+        return exit_code, b"".join(output)
+    else:
+        return exit_code, None
 
 
 def load_yaml(config_filename: Path):
@@ -142,7 +233,7 @@ def modified_environ(*remove: List[str], **update: Dict[str, str]):
 
 
 def deep_merge(*args):
-    """Deep merge multiple dictionaries.
+    """Deep merge multiple dictionaries.  Preserves order in dicts and lists.
 
     >>> value_1 = {
     'a': [1, 2],
@@ -172,7 +263,7 @@ def deep_merge(*args):
 
     if isinstance(d1, dict) and isinstance(d2, dict):
         d3 = {}
-        for key in d1.keys() | d2.keys():
+        for key in tuple(d1.keys()) + tuple(d2.keys()):
             if key in d1 and key in d2:
                 d3[key] = deep_merge(d1[key], d2[key])
             elif key in d1:
@@ -268,11 +359,6 @@ def random_secure_string(
     return "".join(secrets.choice(chars) for i in range(length))
 
 
-def set_do_environment():
-    os.environ["AWS_ACCESS_KEY_ID"] = os.environ["SPACES_ACCESS_KEY_ID"]
-    os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ["SPACES_SECRET_ACCESS_KEY"]
-
-
 def set_docker_image_tag() -> str:
     """Set docker image tag for `jupyterlab`, `jupyterhub`, and `dask-worker`."""
     return os.environ.get("NEBARI_IMAGE_TAG", constants.DEFAULT_NEBARI_IMAGE_TAG)
@@ -330,7 +416,6 @@ def get_provider_config_block_name(provider):
     PROVIDER_CONFIG_NAMES = {
         "aws": "amazon_web_services",
         "azure": "azure",
-        "do": "digital_ocean",
         "gcp": "google_cloud_platform",
     }
 
@@ -353,3 +438,156 @@ def check_environment_variables(variables: Set[str], reference: str) -> None:
             f"""Missing the following required environment variables: {required_variables}\n
             Please see the documentation for more information: {reference}"""
         )
+
+
+def byte_unit_conversion(byte_size_str: str, output_unit: str = "B") -> float:
+    """Converts string representation of byte size to another unit and returns float output
+
+    e.g. byte_unit_conversion("1 KB", "B") -> 1000.0
+    e.g. byte_unit_conversion("1 KiB", "B") -> 1024.0
+    """
+    byte_size_str = byte_size_str.lower()
+    output_unit = output_unit.lower()
+
+    units_multiplier = {
+        "b": 1,
+        "k": 1000,
+        "m": 1000**2,
+        "g": 1000**3,
+        "t": 1000**4,
+        "kb": 1000,
+        "mb": 1000**2,
+        "gb": 1000**3,
+        "tb": 1000**4,
+        "ki": 1024,
+        "mi": 1024**2,
+        "gi": 1024**3,
+        "ti": 1024**4,
+        "kib": 1024,
+        "mib": 1024**2,
+        "gib": 1024**3,
+        "tib": 1024**4,
+    }
+
+    if output_unit not in units_multiplier:
+        raise ValueError(
+            f'Invalid input unit "{output_unit}".  Valid units are {units_multiplier.keys()}'
+        )
+
+    str_pattern = r"\s*^(\d+(?:\.\d*){0,1})\s*([a-zA-Z]*)\s*$"
+    pattern = re.compile(str_pattern, re.IGNORECASE)
+    match = pattern.search(byte_size_str)
+
+    if not match:
+        raise ValueError("Invalid byte size string")
+    value = float(match.group(1))
+    input_unit = match.group(2)
+    if not input_unit:
+        input_unit = "b"
+
+    if input_unit not in units_multiplier:
+        raise ValueError(
+            f'Invalid input unit "{input_unit}".  Valid units are {list(units_multiplier.keys())}'
+        )
+
+    return value * units_multiplier[input_unit] / units_multiplier[output_unit]
+
+
+class JsonDiffEnum(str, enum.Enum):
+    ADDED = "+"
+    REMOVED = "-"
+    MODIFIED = "!"
+
+
+class JsonDiff:
+    def __init__(self, obj1: Dict[str, Any], obj2: Dict[str, Any]):
+        self.diff = self.json_diff(obj1, obj2)
+
+    @staticmethod
+    def json_diff(obj1: Dict[str, Any], obj2: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculates the diff between two json-like objects
+
+        # Example usage
+        obj1 = {"a": 1, "b": {"c": 2, "d": 3}}
+        obj2 = {"a": 1, "b": {"c": 2, "e": 4}, "f": 5}
+
+        result = json_diff(obj1, obj2)
+        """
+        diff = {}
+        for key in set(obj1.keys()) | set(obj2.keys()):
+            if key not in obj1:
+                diff[key] = {JsonDiffEnum.ADDED: obj2[key]}
+            elif key not in obj2:
+                diff[key] = {JsonDiffEnum.REMOVED: obj1[key]}
+            elif obj1[key] != obj2[key]:
+                if isinstance(obj1[key], dict) and isinstance(obj2[key], dict):
+                    nested_diff = JsonDiff.json_diff(obj1[key], obj2[key])
+                    if nested_diff:
+                        diff[key] = nested_diff
+                else:
+                    diff[key] = {JsonDiffEnum.MODIFIED: (obj1[key], obj2[key])}
+        return diff
+
+    @staticmethod
+    def walk_dict(d, path, sentinel):
+        for key, value in d.items():
+            if key is not sentinel:
+                if not isinstance(value, dict):
+                    continue
+                yield from JsonDiff.walk_dict(value, path + [key], sentinel)
+            else:
+                yield path, value
+
+    def modified(self):
+        """Generator that yields the path, old value, and new value of changed items"""
+        for path, (old, new) in self.walk_dict(self.diff, [], JsonDiffEnum.MODIFIED):
+            yield path, old, new
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(diff={json.dumps(self.diff)})"
+
+
+def update_tfstate_file(state_filepath: Path, migration_map: dict) -> None:
+    """
+    Updates a Terraform state file by replacing deprecated attributes with their new
+    counterparts.
+
+    Originally introduced in the Nebari `2025.2.1` release to accommodate major schema
+    changes from Terraform cloud providers, this function can be extended for future
+    migrations or patches. By centralizing the replacement logic, it ensures a clean,
+    modular design that keeps upgrade steps concise.
+
+    :param state_filepath: A Path object pointing to the Terraform state file.
+    :param migration_map: A dictionary where keys are old attribute paths and values are new attribute paths.
+    """
+    if not state_filepath.exists():
+        rich.print(
+            f"[red]No Terraform state file found at {state_filepath}. Skipping migration.[/red]"
+        )
+        return
+
+    try:
+        with open(state_filepath, "r") as f:
+            state = json.load(f)
+    except json.JSONDecodeError:
+        rich.print(
+            f"[red]Invalid JSON structure in {state_filepath}. Skipping migration.[/red]"
+        )
+        return
+
+    # Traverse the resources → instances → attributes hierarchy
+    # and apply the specified attribute replacements.
+    for resource in state.get("resources", []):
+        for instance in resource.get("instances", []):
+            attributes = instance.get("attributes", {})
+            for old_attr, new_attr in migration_map.items():
+                if old_attr in attributes:
+                    attributes[new_attr] = attributes.pop(old_attr)
+
+    # Save the modified state back to disk
+    with open(state_filepath, "w") as f:
+        json.dump(state, f, indent=2)
+
+    rich.print(
+        f" ✅ [green]Successfully updated the Terraform state file: {state_filepath}[/green]"
+    )

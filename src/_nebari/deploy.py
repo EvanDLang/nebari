@@ -49,6 +49,7 @@ def deploy_configuration(
         stage_outputs = {}
         with contextlib.ExitStack() as stack:
             for stage in stages:
+                # added customization to allow deploying with an existing keycloak realm
                 if stage.name == "06-kubernetes-keycloak-configuration":
                     if config.security.keycloak.existing_realm == True:
                         stage_outputs["stages/06-kubernetes-keycloak-configuration"] = {
@@ -68,7 +69,10 @@ def deploy_configuration(
                             }
                         }
                         continue
-                s = stage(output_directory=pathlib.Path.cwd(), config=config)
+                # s = stage(output_directory=pathlib.Path.cwd(), config=config)
+                s: hookspecs.NebariStage = stage(
+                    output_directory=pathlib.Path.cwd(), config=config
+                )
                 stack.enter_context(s.deploy(stage_outputs, disable_prompt))
 
                 if not disable_checks:

@@ -117,12 +117,6 @@ def gha_env_vars(config: schema.Main):
         env_vars["ARM_CLIENT_SECRET"] = "${{ secrets.ARM_CLIENT_SECRET }}"
         env_vars["ARM_SUBSCRIPTION_ID"] = "${{ secrets.ARM_SUBSCRIPTION_ID }}"
         env_vars["ARM_TENANT_ID"] = "${{ secrets.ARM_TENANT_ID }}"
-    elif config.provider == schema.ProviderEnum.do:
-        env_vars["AWS_ACCESS_KEY_ID"] = "${{ secrets.AWS_ACCESS_KEY_ID }}"
-        env_vars["AWS_SECRET_ACCESS_KEY"] = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-        env_vars["SPACES_ACCESS_KEY_ID"] = "${{ secrets.SPACES_ACCESS_KEY_ID }}"
-        env_vars["SPACES_SECRET_ACCESS_KEY"] = "${{ secrets.SPACES_SECRET_ACCESS_KEY }}"
-        env_vars["DIGITALOCEAN_TOKEN"] = "${{ secrets.DIGITALOCEAN_TOKEN }}"
     elif config.provider == schema.ProviderEnum.gcp:
         env_vars["GOOGLE_CREDENTIALS"] = "${{ secrets.GOOGLE_CREDENTIALS }}"
         env_vars["PROJECT_ID"] = "${{ secrets.PROJECT_ID }}"
@@ -196,18 +190,8 @@ def checkout_image_step():
 def setup_python_step():
     return GHA_job_step(
         name="Set up Python",
-        uses="actions/setup-python@v4",
+        uses="actions/setup-python@v5",
         with_={"python-version": GHA_job_steps_extras(LATEST_SUPPORTED_PYTHON_VERSION)},
-    )
-
-
-def setup_gcloud():
-    return GHA_job_step(
-        name="Setup gcloud",
-        uses="google-github-actions/auth@v1",
-        with_={
-            "credentials_json": "${{ secrets.GOOGLE_CREDENTIALS }}",
-        },
     )
 
 
@@ -225,9 +209,6 @@ def gen_nebari_ops(config):
     step2 = setup_python_step()
     step3 = install_nebari_step(config.nebari_version)
     gha_steps = [step1, step2, step3]
-
-    if config.provider == schema.ProviderEnum.gcp:
-        gha_steps.append(setup_gcloud())
 
     for step in config.ci_cd.before_script:
         gha_steps.append(GHA_job_step(**step))
