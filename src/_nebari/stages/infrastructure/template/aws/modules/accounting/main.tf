@@ -1,5 +1,6 @@
 resource "aws_resourcegroups_group" "main" {
-  name        = var.project
+  #name        = var.project
+  name = "${var.project}-${var.environment}"
   description = "project ${var.project} - environment ${var.environment}"
 
   resource_query {

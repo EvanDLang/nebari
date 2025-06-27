@@ -4,7 +4,7 @@ data "aws_iam_role" "node-group" {
 
 data "aws_iam_policy" "s3_access_policy" {
   #name = "${var.cluster_name}-s3_access_policy"
-  name = "airborne-smce-dev-s3_access_policy"
+  name = "bioscape-smce-s3_access_policy"
 }
 
 resource "aws_iam_role_policy_attachment" "s3_policy_attachment" {
